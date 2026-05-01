@@ -1,4 +1,5 @@
 import time
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -16,8 +17,9 @@ from seal import (
     scheme_type,
 )
 from sklearn.datasets import load_iris
+from sklearn.utils import Bunch
 
-iris = load_iris()
+iris = cast(Bunch, load_iris())
 df = pd.DataFrame(iris.data, columns=iris.feature_names)
 
 # This is step two of the assignment. it loads Iris and defines the query classes
@@ -34,7 +36,7 @@ for col in df.columns:
 
 print("\n[Plaintext baseline timings]")
 for col in df.columns:
-    data = df[col].values
+    data = df[col].to_numpy(dtype=float)
     t0 = time.perf_counter()
     _ = np.mean(data)
     _ = np.min(data)
@@ -44,8 +46,6 @@ for col in df.columns:
     print(f"  {col:30s} → {(t1 - t0) * 1000:.4f} ms")
 
 # Here begins part three with CKKS Setup via Microsoft SEAL
-
-
 print("\n" + "=" * 60)
 print("CKKS Encryption Setup")
 print("=" * 60)
@@ -54,14 +54,16 @@ print("=" * 60)
 poly_modulus_degree = 8192
 scale = 2.0**40
 
-parms = EncryptionParameters(scheme_type.ckks)
+
+# Error with Python Seal binding
+parms = EncryptionParameters(scheme_type.ckks)  # type: ignore
 parms.set_poly_modulus_degree(poly_modulus_degree)
 parms.set_coeff_modulus(CoeffModulus.Create(poly_modulus_degree, [60, 40, 40, 60]))
 
 context = SEALContext(parms)
 print(f"\nPoly modulus degree : {poly_modulus_degree}")
-print(f"Scale               : 2^40")
-print(f"Coeff modulus bits  : [60, 40, 40, 60]")
+print("Scale               : 2^40")
+print("Coeff modulus bits  : [60, 40, 40, 60]")
 
 # Key algorithm
 t0 = time.perf_counter()
@@ -122,7 +124,7 @@ def he_dot_with_mask(cipher: Ciphertext, mask: list, name="mask") -> float:
     plain_mask = Plaintext()
     encoder.encode(mask, scale, plain_mask)
     result = Ciphertext()
-    evaluator.multiply_plain(cipher, plain_mask, result)
+    result = evaluator.multiply_plain(cipher, plain_mask)
     evaluator.rescale_to_next_inplace(result)
     vals = decrypt_column(result, len(mask))
     return float(np.sum(vals[: len(mask)]))
